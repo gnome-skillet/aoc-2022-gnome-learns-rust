@@ -1,6 +1,8 @@
 # AOC 2022
 
 This repo contains solutions for the [2022 Advent of Code](https://adventofcode.com/) in Rust.
+This is a fork from [sstadick](https://github.com/sstadick/aoc-2022).
+Superior answers are replaced with inferior attempts from a rust-newb NPC.
 
 ## Running solutions
 
