@@ -15,7 +15,7 @@ struct Opts {
 #[enum_dispatch(CommandImpl)]
 #[derive(Parser, Debug)]
 enum SubCommand {
-    Day5(day5::Day5),
+    Day6(day6::Day6),
 }
 fn main() -> Result<(), DynError> {
     let opts = Opts::parse();
