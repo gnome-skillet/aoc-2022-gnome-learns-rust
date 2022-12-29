@@ -121,43 +121,57 @@ impl PartialEq for Point {
 }
 
 #[derive(Debug)]
-pub struct Knot {
-    head: Vec<Point>,
-    tail: Vec<Point>,
-    name: String,
+pub struct Rope {
+    knots: Vec<Vec<Point>>,
 }
 
-impl Knot {
-    fn new(name: String) -> Knot {
-        let mut p: Point = Point::origin();
-        let mut head: Vec<Point> = vec![];
-        head.push(p);
-        let mut p: Point = Point::origin();
-        let mut tail: Vec<Point> = vec![];
-        tail.push(p);
-        Knot { head, tail, name }
+impl Rope {
+    fn new(n_knots: usize) -> Rope {
+        let mut knots: Vec<Vec<Point>> = vec![vec![]; n_knots + 1];
+        for i in 0..knots.len() {
+            let p: Point = Point::origin();
+            knots[i].push(p);
+        }
+        Rope { knots }
     }
 
     fn move_head(&mut self, movement: Move) {
         println!("command: {:?}", movement);
         let (x, y, z): (i32, i32, u8) = movement.deconstruct_move();
         for i in 0..z {
-            let top = self.head.pop().unwrap();
+            let top = self.knots[0].pop().unwrap();
             let p: Point = Point::new(top.x + x, top.y + y);
             //println!("move {:?} -> {:?}", top, p);
-            self.head.push(top);
-            self.head.push(p);
+            self.knots[0].push(top);
+            self.knots[0].push(p);
         }
     }
 
     fn trace_tail(&mut self) {
-        let mut tail_index: usize = 0;
-        let mut head_index: usize = 1;
-        for i in 1..self.head.len() {
-            let best_move: Move = self.tail[i - 1].best_move(&self.head[i]);
-            let (x, y, z) = best_move.deconstruct_move();
-            let p: Point = Point::new(self.tail[i - 1].x + x, self.tail[i - 1].y + y);
-            self.tail.push(p);
+        for j in 1..self.knots.len() {
+            let mut tail_index: usize = 0;
+            let mut head_index: usize = 1;
+            for i in 1..self.knots[0].len() {
+                let best_move: Move = self.knots[j][i - 1].best_move(&self.knots[j - 1][i]);
+                let (x, y, z) = best_move.deconstruct_move();
+                let p: Point = Point::new(self.knots[j][i - 1].x + x, self.knots[j][i - 1].y + y);
+                self.knots[j].push(p);
+            }
+        }
+    }
+
+    fn n_unique_spaces(&self, index: usize) -> usize {
+        let mut unique_values: HashSet<Point> = HashSet::new();
+        for v in self.knots[index].iter() {
+            let mut x: Point = v.clone();
+            unique_values.insert(x);
+        }
+        unique_values.len()
+    }
+
+    fn n_visits_per_knot(&self) {
+        for i in 0..self.knots.len() {
+            println!("knots[{i}] = {:?}", self.knots[i].len());
         }
     }
 }
@@ -180,29 +194,25 @@ fn read_move(input: &str) -> IResult<&str, Move> {
 impl CommandImpl for Day9 {
     fn main(&self) -> Result<(), DynError> {
         let lines: Vec<String> = slurp_file(&self.input)?;
-        let mut knot: Knot = Knot::new("head".to_string());
-        let head: Point = Point::new(2, 2);
-        let tail: Point = Point::origin();
-        let best_move = tail.best_move(&head);
-        //println!("best move {:?} -> {:?} is {:?}", tail, head, best_move);
+        let mut rope: Rope = Rope::new(10);
 
         //let newmove = read_move("L 4");
         //println!("{:?}", newmove);
         for line in lines {
             let knot_movement = read_move(&line);
             let movement = knot_movement.unwrap().1;
-            knot.move_head(movement);
+            rope.move_head(movement);
         }
-        knot.trace_tail();
-        for i in 0..knot.head.len() {
-            println!("head: {:?} tail: {:?}", knot.head[i], knot.tail[i]);
-        }
+        rope.trace_tail();
+        rope.n_visits_per_knot();
         let mut unique_values: HashSet<Point> = HashSet::new();
-        for v in knot.tail.iter() {
-            let mut x: Point = v.clone();
+        for v in rope.knots[1].iter() {
+            let x: Point = v.clone();
             unique_values.insert(x);
         }
-        println!("Visited {:?} unique locations", unique_values.len());
+        for i in 1..11 {
+            println!("knot[{i}] visted {:?} unique locations", rope.n_unique_spaces(i));
+        }
         println!("EX: {:?}", self.input);
         Ok(())
     }
