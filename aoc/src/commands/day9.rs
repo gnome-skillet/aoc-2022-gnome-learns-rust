@@ -6,9 +6,9 @@ use super::{CommandImpl, DynError};
 
 use crate::utils::slurp_file;
 
-//use std::collections::HashMap;
+use std::collections::HashSet;
 
-//use std::collections::HashSet;
+//use std::collections::HashMap;
 
 use nom::{
     branch::alt,
@@ -54,7 +54,7 @@ impl Move {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, Clone, Copy)]
 pub struct Point {
     x: i32,
     y: i32,
@@ -67,30 +67,6 @@ impl Point {
 
     fn origin() -> Point {
         Point::new(0, 0)
-    }
-
-    fn right(&self) -> Point {
-        let x = self.x + 1;
-        let y = self.y;
-        Point::new(x, y)
-    }
-
-    fn left(&self) -> Point {
-        let x = self.x - 1;
-        let y = self.y;
-        Point::new(x, y)
-    }
-
-    fn up(&self) -> Point {
-        let x = self.x;
-        let y = self.y + 1;
-        Point::new(x, y)
-    }
-
-    fn down(&self) -> Point {
-        let x = self.x;
-        let y = self.y - 1;
-        Point::new(x, y)
     }
 
     pub fn coordinates(&self) -> (i32, i32) {
@@ -164,21 +140,11 @@ impl Knot {
 
     fn move_head(&mut self, movement: Move) {
         println!("command: {:?}", movement);
-        let (x, y, z): (i32, i32, u8) = match movement {
-            Move::Right(s) => (1, 0, s),
-            Move::Left(s) => (-1, 0, s),
-            Move::Up(s) => (0, 1, s),
-            Move::Down(s) => (0, -1, s),
-            Move::UpRight(s) => (1, 1, s),
-            Move::DownRight(s) => (1, -1, s),
-            Move::UpLeft(s) => (-1, 1, s),
-            Move::DownLeft(s) => (-1, -1, s),
-            Move::None => (0, 0, 0),
-        };
+        let (x, y, z): (i32, i32, u8) = movement.deconstruct_move();
         for i in 0..z {
             let top = self.head.pop().unwrap();
             let p: Point = Point::new(top.x + x, top.y + y);
-            println!("move {:?} -> {:?}", top, p);
+            //println!("move {:?} -> {:?}", top, p);
             self.head.push(top);
             self.head.push(p);
         }
@@ -187,7 +153,12 @@ impl Knot {
     fn trace_tail(&mut self) {
         let mut tail_index: usize = 0;
         let mut head_index: usize = 1;
-        let best_move: Move = self.tail[tail_index].best_move(&self.head[head_index]);
+        for i in 1..self.head.len() {
+            let best_move: Move = self.tail[i - 1].best_move(&self.head[i]);
+            let (x, y, z) = best_move.deconstruct_move();
+            let p: Point = Point::new(self.tail[i - 1].x + x, self.tail[i - 1].y + y);
+            self.tail.push(p);
+        }
     }
 }
 
@@ -213,7 +184,7 @@ impl CommandImpl for Day9 {
         let head: Point = Point::new(2, 2);
         let tail: Point = Point::origin();
         let best_move = tail.best_move(&head);
-        println!("best move {:?} -> {:?} is {:?}", tail, head, best_move);
+        //println!("best move {:?} -> {:?} is {:?}", tail, head, best_move);
 
         //let newmove = read_move("L 4");
         //println!("{:?}", newmove);
@@ -223,7 +194,15 @@ impl CommandImpl for Day9 {
             knot.move_head(movement);
         }
         knot.trace_tail();
-        println!("{:?}", knot);
+        for i in 0..knot.head.len() {
+            println!("head: {:?} tail: {:?}", knot.head[i], knot.tail[i]);
+        }
+        let mut unique_values: HashSet<Point> = HashSet::new();
+        for v in knot.tail.iter() {
+            let mut x: Point = v.clone();
+            unique_values.insert(x);
+        }
+        println!("Visited {:?} unique locations", unique_values.len());
         println!("EX: {:?}", self.input);
         Ok(())
     }
