@@ -8,8 +8,6 @@ use crate::utils::slurp_file;
 
 use std::collections::HashSet;
 
-//use std::collections::HashMap;
-
 use nom::{
     branch::alt,
     bytes::complete::tag,
