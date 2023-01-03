@@ -14,6 +14,11 @@ use std::fs::read;
 
 use clap::Parser;
 
+// this is not my solution
+// used solely to learn nom
+// reference     https://github.com/ChristopherBiscardi/advent-of-code/tree/main/2022/rust for a
+// real solution
+
 #[derive(Debug)]
 enum Value {
     Old,
