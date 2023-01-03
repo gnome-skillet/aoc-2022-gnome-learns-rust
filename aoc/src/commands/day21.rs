@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::utils::slurp_file;
+//use crate::utils::slurp_file;
 
 use super::{CommandImpl, DynError};
 
@@ -28,7 +28,7 @@ pub struct Day21 {
     input: PathBuf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 enum Operation {
     Add(String, String),
     Subtract(String, String),
@@ -40,7 +40,7 @@ enum Operation {
 impl Operation {
     fn is_assignment(&self) -> bool {
         match self {
-            Operation::Assign(x) => true,
+            Operation::Assign(_x) => true,
             _ => false,
         }
     }
@@ -52,10 +52,10 @@ impl Operation {
     }
     fn calculate(&self, a: &Self, b: &Self) -> Operation {
         match self {
-            Operation::Add(x, y) => Operation::Assign(a.value() + b.value()),
-            Operation::Subtract(x, y) => Operation::Assign(a.value() - b.value()),
-            Operation::Multiply(x, y) => Operation::Assign(a.value() * b.value()),
-            Operation::Divide(x, y) => Operation::Assign(a.value() / b.value()),
+            Operation::Add(_, _) => Operation::Assign(a.value() + b.value()),
+            Operation::Subtract(_, _) => Operation::Assign(a.value() - b.value()),
+            Operation::Multiply(_, _) => Operation::Assign(a.value() * b.value()),
+            Operation::Divide(_, _) => Operation::Assign(a.value() / b.value()),
             _ => panic!("cannot run value on expression"),
         }
     }
@@ -133,10 +133,63 @@ impl CommandImpl for Day21 {
         for (k, v) in map.iter() {
             println!("{:?} {:?}", k, v);
         }
-        println!("{:?}", g);
-        println!("");
+        println!("{:?}\n", g);
 
         println!("{:?}", map);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn assign_works() {
+        let x: String = "root: 3".to_string();
+        let mut curr = parse_monkey_jobs(&x).unwrap();
+        println!("curr = {:?}", curr);
+        let actual = curr.1.pop().unwrap().1;
+        let expected: Operation = Operation::Assign(3);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn add_works() {
+        let x: String = "root: a + b".to_string();
+        let mut curr = parse_monkey_jobs(&x).unwrap();
+        println!("curr = {:?}", curr);
+        let actual = curr.1.pop().unwrap().1;
+        let expected: Operation = Operation::Add("a".to_string(), "b".to_string());
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn sub_works() {
+        let x: String = "root: a - b".to_string();
+        let mut curr = parse_monkey_jobs(&x).unwrap();
+        println!("curr = {:?}", curr);
+        let actual = curr.1.pop().unwrap().1;
+        let expected: Operation = Operation::Subtract("a".to_string(), "b".to_string());
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn mult_works() {
+        let x: String = "root: a * b".to_string();
+        let mut curr = parse_monkey_jobs(&x).unwrap();
+        println!("curr = {:?}", curr);
+        let actual = curr.1.pop().unwrap().1;
+        let expected: Operation = Operation::Multiply("a".to_string(), "b".to_string());
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn div_works() {
+        let x: String = "root: a / b".to_string();
+        let mut curr = parse_monkey_jobs(&x).unwrap();
+        println!("curr = {:?}", curr);
+        let actual = curr.1.pop().unwrap().1;
+        let expected: Operation = Operation::Divide("a".to_string(), "b".to_string());
+        assert_eq!(actual, expected);
     }
 }
