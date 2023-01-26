@@ -87,7 +87,7 @@ impl Monkey {
     fn inspect_item(&mut self, relief_lowers_worry_level: bool, magic_trick: u64) -> u64 {
         self.n_inspected += 1;
         let item = self.items.pop_front().unwrap();
-        println!("\tMonkey inspects an item with a worry level of {item}");
+        //println!("\tMonkey inspects an item with a worry level of {item}");
         match &self.operation {
             Operation::Multiply((a, b)) => {
                 let num_a = match a {
@@ -99,9 +99,9 @@ impl Monkey {
                     Value::Num(num) => *num,
                 };
                 let result = num_a * num_b;
-                println!("\t\tWorry level is multiplied by {num_b} to {result}");
+                //println!("\t\tWorry level is multiplied by {num_b} to {result}");
                 let newresult: u64 = boredom_correction(result, magic_trick);
-                println!("\t\tMonkey gets bored with item. Worry level is divided by {magic_trick} to {newresult}.");
+                //println!("\t\tMonkey gets bored with item. Worry level is divided by {magic_trick} to {newresult}.");
                 newresult
             }
             Operation::Add((a, b)) => {
@@ -114,9 +114,9 @@ impl Monkey {
                     Value::Num(num) => *num,
                 };
                 let result = num_a + num_b;
-                println!("\t\tWorry level increases by {num_b} to {result}");
+                //println!("\t\tWorry level increases by {num_b} to {result}");
                 let newresult: u64 = boredom_correction(result, magic_trick);
-                println!("\t\tMonkey gets bored with item. Worry level is divided by {magic_trick} to {newresult}.");
+                //println!("\t\tMonkey gets bored with item. Worry level is divided by {magic_trick} to {newresult}.");
                 newresult
             }
         }
@@ -125,10 +125,10 @@ impl Monkey {
 
     fn throw_to(&self, item: u64) -> usize {
         if item % self.test.modulo == 0 {
-            println!("\t\tCurrent worry level is divisible by {:?}.", self.test.modulo);
+            //println!("\t\tCurrent worry level is divisible by {:?}.", self.test.modulo);
             self.test.divisible_monkey
         } else {
-            println!("\t\tCurrent worry level is not divisible by {:?}.", self.test.modulo);
+            //println!("\t\tCurrent worry level is not divisible by {:?}.", self.test.modulo);
             self.test.indivisible_monkey
         }
     }
@@ -150,7 +150,7 @@ impl MonkeyCircle {
     }
 
     pub fn print_tally(&self) {
-        println!("Round {:?}", self.n_rounds);
+        //println!("Round {:?}", self.n_rounds);
         for i in 0..self.monkeys.len() {
             let monkey = self.monkeys.get(i).unwrap();
             println!(
@@ -167,7 +167,7 @@ impl MonkeyCircle {
             let from_monkey = self.monkeys.get_mut(monkey_index).unwrap();
             let item = from_monkey.inspect_item(true, 3);
             let catcher_index = from_monkey.throw_to(item);
-            println!("\t\tItem worry level {item} is thrown to monkey {catcher_index}");
+            //println!("\t\tItem worry level {item} is thrown to monkey {catcher_index}");
             let to_monkey = self.monkeys.get_mut(catcher_index).unwrap();
             to_monkey.add_item(item);
         }
@@ -176,7 +176,7 @@ impl MonkeyCircle {
     pub fn inspection_round(&mut self) {
         self.n_rounds += 1;
         for i in 0..self.monkeys.len() {
-            println!("Monkey {i}");
+            //println!("Monkey {i}");
             self.inspect_items(i);
         }
     }
@@ -306,7 +306,7 @@ impl CommandImpl for Day11 {
         let file = read_to_string(&self.input).unwrap();
         //let file = read(&self.input).expect("Error in reading the file");
         let mut monkey_circle: MonkeyCircle = MonkeyCircle::new(&file);
-        println!("monkey circle {:?}", monkey_circle);
+        //println!("monkey circle {:?}", monkey_circle);
         monkey_circle.run_n_rounds(20);
         let final_score: u64 = monkey_circle.get_monkey_business_score();
         println!("Final Score: {final_score}");
