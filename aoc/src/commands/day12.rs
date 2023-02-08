@@ -38,7 +38,7 @@ impl Point {
     pub fn has_edge(&self, other: &Self) -> bool {
         let reachable: bool = (other.height > self.height) || (self.height - other.height <= 1);
         let pos_diff: usize = self.row.abs_diff(other.row) + self.column.abs_diff(other.column);
-        pos_diff <= 1 && reachable 
+        pos_diff <= 1 && reachable
     }
 
     pub fn coordinates(&self) -> (usize, usize) {
