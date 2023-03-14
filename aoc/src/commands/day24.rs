@@ -139,6 +139,7 @@ struct Valley {
     length: usize,
     width: usize,
     minute: u32,
+    ntrips: usize,
 }
 
 impl Valley {
@@ -150,14 +151,45 @@ impl Valley {
         let mut legal_moves: HashSet<IVec2> = HashSet::new();
         legal_moves.insert(start_location);
         let minute: u32 = 0;
-        Valley { blizzards, start_location, destination, legal_moves, length, width, minute }
+        let ntrips: usize = 0;
+        Valley {
+            blizzards,
+            start_location,
+            destination,
+            legal_moves,
+            length,
+            width,
+            minute,
+            ntrips,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.legal_moves.clear();
+        if self.ntrips.rem_euclid(2) == 1 {
+            let start_location: IVec2 = IVec2::new(self.length as i32, (self.width - 1) as i32);
+            let destination: IVec2 = IVec2::new(0 as i32, 0 as i32);
+            self.start_location = start_location;
+            self.legal_moves.insert(start_location);
+            self.destination = destination;
+        } else {
+            let start_location: IVec2 = IVec2::new(-1 as i32, 0 as i32);
+            let destination: IVec2 = IVec2::new((self.length - 1) as i32, (self.width - 1) as i32);
+            self.start_location = start_location;
+            self.legal_moves.insert(start_location);
+            self.destination = destination;
+        }
+        println!(
+            "reset: start_location({:?}), destination({:?})",
+            self.start_location, self.destination
+        );
     }
 
     fn is_legal(&self, location: &IVec2) -> bool {
-        //println!("is_legal({:?})", self.location);
         let loc = location.to_array();
-        let dim = self.destination.to_array();
-        loc[0] >= 0 && loc[0] <= dim[0] && loc[1] >= 0 && loc[1] <= dim[1]
+        let length: i32 = self.length as i32;
+        let width: i32 = self.width as i32;
+        loc[0] >= 0 && loc[0] < length && loc[1] >= 0 && loc[1] < width
     }
 
     fn is_blizzard(&self, p: &IVec2) -> bool {
@@ -214,27 +246,23 @@ impl Valley {
     }
 
     fn move_blizzards(&mut self) {
-        let dim = self.destination.to_array();
-        //println!("move_blizzards dimension: {:?}", dim);
-
         for b in self.blizzards.iter_mut() {
             b.displace();
-            b.modulo(0, dim[0] + 1);
-            b.modulo(1, dim[1] + 1);
+            b.modulo(0, self.length as i32);
+            b.modulo(1, self.width as i32);
         }
     }
 
     fn reachable_locations(&mut self, current_position: &IVec2) -> Vec<IVec2> {
-        //self.move_blizzards();
         let mut locations: Vec<IVec2> = vec![];
         for new_move in self.possible_moves(current_position) {
-            //println!("is {:?} legal", new_move);
             if self.is_location_legal(&new_move) {
                 locations.push(new_move);
             }
         }
         if locations.len() == 0 {
-            let start_location: IVec2 = IVec2::new(-1, 0);
+            //println!("no legal moves");
+            let start_location: IVec2 = self.start_location;
             locations.push(start_location);
         }
         locations
@@ -243,29 +271,26 @@ impl Valley {
     fn visit_future_locations(&mut self) {
         let mut legal_moves: HashSet<IVec2> = HashSet::new();
         swap(&mut legal_moves, &mut self.legal_moves);
-        //println!("swapped legal_moves: {:?} - {:?}", self.minute, legal_moves);
-        //println!("swapped self.legal_moves: {:?} - {:?}", self.minute, self.legal_moves);
         let positions: Vec<IVec2> =
             legal_moves.into_iter().flat_map(|x| self.reachable_locations(&x)).collect();
-        //println!("Minute({:?}): {:?}", self.minute, positions);
         self.legal_moves = HashSet::from_iter(positions.iter().cloned())
     }
 
     fn simulate_minute(&mut self) {
         self.move_blizzards();
         self.visit_future_locations();
-        //println!("simulate_minute({:?}): {:?}", self.minute, self.legal_moves);
-        //self.show_blizzards();
         self.minute += 1;
     }
 
     fn simulate(&mut self) -> u32 {
-        //println!("start ({:?}): {:?}", self.minute, self.legal_moves);
-        //self.show_blizzards();
         while !self.destination_reached() {
             self.simulate_minute();
         }
-        self.minute + 1
+        self.move_blizzards();
+        self.ntrips += 1;
+        self.minute += 1;
+        self.reset();
+        self.minute
     }
 }
 
@@ -295,17 +320,14 @@ impl CommandImpl for Day24 {
     fn main(&self) -> Result<(), DynError> {
         let characters = fs::read_to_string(&self.input).unwrap();
         let (_, vecs) = parse_valley(&characters).unwrap();
-        //for v in vecs.iter() {
-        //    println!("{:?}", v);
-        //}
         let valley: Vec<Vec<char>> = remove_walls(&vecs);
-        //for v in valley.iter() {
-        //    println!("{:?}", v);
-        //}
         let mut blizzards = locate_blizzards(&valley);
         let mut valley: Valley = Valley::new(blizzards, valley.len(), valley[0].len());
         let nminutes: u32 = valley.simulate();
-
+        println!("reached in {:?} minutes", nminutes);
+        let nminutes: u32 = valley.simulate();
+        println!("reached in {:?} minutes", nminutes);
+        let nminutes: u32 = valley.simulate();
         println!("reached in {:?} minutes", nminutes);
 
         Ok(())
