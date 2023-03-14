@@ -1,10 +1,14 @@
-use std::path::PathBuf;
-
 use clap::Parser;
 
 use glam::IVec2;
 
 use super::{CommandImpl, DynError};
+
+use std::collections::HashSet;
+
+use std::path::PathBuf;
+
+use std::mem::swap;
 
 use std::fmt;
 
@@ -28,6 +32,7 @@ enum Direction {
     East,
     West,
     North,
+    Stationary,
 }
 
 impl Direction {
@@ -37,67 +42,23 @@ impl Direction {
             Direction::East => IVec2::new(0, 1),
             Direction::North => IVec2::new(-1, 0),
             Direction::South => IVec2::new(1, 0),
+            Direction::Stationary => IVec2::new(0, 0),
         }
     }
 
     fn symbol(&self) -> char {
         match self {
-            Direction::West => '<',
-            Direction::East => '>',
-            Direction::North => '^',
             Direction::South => 'v',
+            Direction::East => '>',
+            Direction::Stationary => '.',
+            Direction::North => '^',
+            Direction::West => '<',
         }
     }
 }
 
-const COMPASS: &'static [Direction; 4] =
-    &[Direction::South, Direction::East, Direction::North, Direction::West];
-
-#[derive(Debug, Clone, PartialEq)]
-struct Expedition {
-    location: IVec2,
-    dimension: IVec2,
-}
-
-impl Expedition {
-    fn new(location: IVec2, dimension: IVec2) -> Expedition {
-        Expedition { location, dimension }
-    }
-
-    fn move_to(&self, direction: Direction) -> Expedition {
-        //println!("move_to({:?})", direction);
-        let location = self.location + direction.displace();
-        let dimension = self.dimension.clone();
-        Expedition { location, dimension }
-    }
-
-    fn is_legal(&self) -> bool {
-        //println!("is_legal({:?})", self.location);
-        let move_result: bool = self.location[0] >= 0
-            && self.location[0] < self.dimension[0]
-            && self.location[1] >= 0
-            && self.location[1] < self.dimension[1];
-        //println!("is_legal({:?}) = {move_result}", self.location);
-        move_result
-    }
-
-    fn possible_moves(&self) -> Vec<Expedition> {
-        COMPASS.iter().map(|d| self.move_to(*d)).filter(|d| d.is_legal()).collect()
-    }
-
-    fn destination_reached(&self) -> bool {
-        let dim = self.dimension.to_array();
-        let destination: IVec2 = IVec2::new(dim[0] - 1, dim[1] - 1);
-        self.location == destination
-    }
-}
-
-impl fmt::Display for Expedition {
-    // This trait requires `fmt` with this exact signature.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.location)
-    }
-}
+const COMPASS: &'static [Direction; 5] =
+    &[Direction::South, Direction::East, Direction::Stationary, Direction::North, Direction::West];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Blizzard {
@@ -120,9 +81,9 @@ impl Blizzard {
         self.location = IVec2::new(values[0], values[1]);
     }
 
-    fn is_blizzard(&self, location: IVec2) -> bool {
-        location == self.location
-    }
+    //fn is_blizzard(&self, location: IVec2) -> bool {
+    //    location == self.location
+    //}
 }
 
 fn parse_valley(input: &str) -> IResult<&str, Vec<Vec<char>>> {
@@ -149,7 +110,7 @@ fn remove_walls(vecs: &Vec<Vec<char>>) -> Vec<Vec<char>> {
 fn blizzard(index: usize, direction: Direction, length: i32, width: i32) -> Option<Blizzard> {
     let index: i32 = index as i32;
     let location: IVec2 = IVec2::new(index / width, index.rem_euclid(width));
-    println!("blizzard({index}): {:?}", location);
+    //println!("blizzard({index}): {:?}", location);
     Some(Blizzard::new(location, direction))
 }
 
@@ -172,55 +133,36 @@ fn locate_blizzards(vecs: &Vec<Vec<char>>) -> Vec<Blizzard> {
 #[derive(Debug)]
 struct Valley {
     blizzards: Vec<Blizzard>,
-    expedition: Expedition,
+    start_location: IVec2,
     destination: IVec2,
-    counter: u32,
+    legal_moves: HashSet<IVec2>,
+    length: usize,
+    width: usize,
+    minute: u32,
 }
 
 impl Valley {
     fn new(blizzards: Vec<Blizzard>, length: usize, width: usize) -> Valley {
-        let length = length as i32;
-        let width = width as i32;
-        let destination: IVec2 = IVec2::new(length, width);
-        let location: IVec2 = IVec2::new(-1, 0);
-        let expedition: Expedition = Expedition::new(location, destination);
-        let counter: u32 = 0;
-        Valley { blizzards, expedition, destination, counter }
+        let l: i32 = (length - 1) as i32;
+        let w: i32 = (width - 1) as i32;
+        let destination: IVec2 = IVec2::new(l, w);
+        let start_location: IVec2 = IVec2::new(-1, 0);
+        let mut legal_moves: HashSet<IVec2> = HashSet::new();
+        legal_moves.insert(start_location);
+        let minute: u32 = 0;
+        Valley { blizzards, start_location, destination, legal_moves, length, width, minute }
     }
 
-    fn score(&self, location: IVec2) -> i32 {
-        let curr = location.to_array();
+    fn is_legal(&self, location: &IVec2) -> bool {
+        //println!("is_legal({:?})", self.location);
+        let loc = location.to_array();
         let dim = self.destination.to_array();
-
-        if self.is_blizzard(location) || curr[0] < 0 || curr[1] < 0 {
-            -1000
-        } else {
-            dim[0] + dim[1] - ((dim[0] - curr[0]) + (dim[1] - curr[1]))
-        }
+        loc[0] >= 0 && loc[0] <= dim[0] && loc[1] >= 0 && loc[1] <= dim[1]
     }
 
-    fn minute(&mut self) {
-        let dim = self.destination.to_array();
-
-        for b in self.blizzards.iter_mut() {
-            b.displace();
-            b.modulo(0, dim[0]);
-            b.modulo(1, dim[1]);
-        }
-        let mut best_score: i32 = self.score(self.expedition.location);
-        for new_move in self.expedition.possible_moves() {
-            if self.score(new_move.location) > best_score {
-                self.expedition = new_move;
-                best_score = self.score(self.expedition.location);
-            }
-        }
-        println!("Minute {:?}, {:?}", self.counter, self.expedition.location);
-        self.counter += 1;
-    }
-
-    fn is_blizzard(&self, p: IVec2) -> bool {
+    fn is_blizzard(&self, p: &IVec2) -> bool {
         for b in self.blizzards.iter() {
-            if p == b.location {
+            if *p == b.location {
                 return true;
             }
         }
@@ -228,21 +170,102 @@ impl Valley {
         false
     }
 
-    fn symbol(&self, p: IVec2) -> String {
-        if p == self.expedition.location {
-            return String::from("E");
+    fn show_blizzards(&self) {
+        let dim = self.destination.to_array();
+        println!("dimension: {:?}", dim);
+        print!("#");
+        for _ in 0..self.width {
+            print!("#");
         }
-        for b in self.blizzards.iter() {
-            if p == b.location {
-                return String::from(b.direction.symbol());
+        print!("#");
+        println!("");
+        for i in 0..self.length {
+            print!("#");
+            for j in 0..self.width {
+                let p: IVec2 = IVec2::new(i as i32, j as i32);
+                if self.is_blizzard(&p) {
+                    print!("B");
+                } else if self.legal_moves.contains(&p) {
+                    print!("E");
+                } else {
+                    print!(".");
+                }
             }
+            println!("#");
         }
+        print!("#");
+        for _ in 0..self.width {
+            print!("#");
+        }
+        print!("#");
+        println!("");
+    }
 
-        String::from(".")
+    fn is_location_legal(&self, location: &IVec2) -> bool {
+        !self.is_blizzard(location) && self.is_legal(location)
     }
 
     fn destination_reached(&self) -> bool {
-        self.expedition.destination_reached()
+        self.legal_moves.contains(&self.destination)
+    }
+
+    fn possible_moves(&self, curr: &IVec2) -> Vec<IVec2> {
+        COMPASS.iter().map(|d| *curr + d.displace()).filter(|d| self.is_legal(d)).collect()
+    }
+
+    fn move_blizzards(&mut self) {
+        let dim = self.destination.to_array();
+        //println!("move_blizzards dimension: {:?}", dim);
+
+        for b in self.blizzards.iter_mut() {
+            b.displace();
+            b.modulo(0, dim[0] + 1);
+            b.modulo(1, dim[1] + 1);
+        }
+    }
+
+    fn reachable_locations(&mut self, current_position: &IVec2) -> Vec<IVec2> {
+        //self.move_blizzards();
+        let mut locations: Vec<IVec2> = vec![];
+        for new_move in self.possible_moves(current_position) {
+            //println!("is {:?} legal", new_move);
+            if self.is_location_legal(&new_move) {
+                locations.push(new_move);
+            }
+        }
+        if locations.len() == 0 {
+            let start_location: IVec2 = IVec2::new(-1, 0);
+            locations.push(start_location);
+        }
+        locations
+    }
+
+    fn visit_future_locations(&mut self) {
+        let mut legal_moves: HashSet<IVec2> = HashSet::new();
+        swap(&mut legal_moves, &mut self.legal_moves);
+        //println!("swapped legal_moves: {:?} - {:?}", self.minute, legal_moves);
+        //println!("swapped self.legal_moves: {:?} - {:?}", self.minute, self.legal_moves);
+        let positions: Vec<IVec2> =
+            legal_moves.into_iter().flat_map(|x| self.reachable_locations(&x)).collect();
+        //println!("Minute({:?}): {:?}", self.minute, positions);
+        self.legal_moves = HashSet::from_iter(positions.iter().cloned())
+    }
+
+    fn simulate_minute(&mut self) {
+        self.move_blizzards();
+        self.visit_future_locations();
+        //println!("simulate_minute({:?}): {:?}", self.minute, self.legal_moves);
+        //self.show_blizzards();
+        self.minute += 1;
+    }
+
+    fn simulate(&mut self) -> u32 {
+        //println!("start ({:?}): {:?}", self.minute, self.legal_moves);
+        //self.show_blizzards();
+        while !self.destination_reached() {
+            self.simulate_minute();
+        }
+        self.minute + 1
     }
 }
 
@@ -250,15 +273,15 @@ impl fmt::Display for Valley {
     // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut output = String::new();
-        output.push_str(&format!("Expedition: {}\n", self.expedition));
-        let dim = self.destination.to_array();
-        for w in 0..dim[0] {
-            for h in 0..dim[1] {
-                let p: IVec2 = IVec2::new(w, h);
-                output.push_str(&format!("{}", self.symbol(p)));
-            }
-            output.push_str(&format!("\n"));
-        }
+        output.push_str(&format!("Expedition: {}\n", self.start_location));
+        //let dim = self.destination.to_array();
+        //for w in 0..dim[0] {
+        //    for h in 0..dim[1] {
+        //        let p: IVec2 = IVec2::new(w, h);
+        //        output.push_str(&format!("{}", self.symbol(p)));
+        //    }
+        //    output.push_str(&format!("\n"));
+        //}
         write!(f, "{}", output)
     }
 }
@@ -272,23 +295,18 @@ impl CommandImpl for Day24 {
     fn main(&self) -> Result<(), DynError> {
         let characters = fs::read_to_string(&self.input).unwrap();
         let (_, vecs) = parse_valley(&characters).unwrap();
-        println!("parse_valley");
-        for v in vecs.iter() {
-            println!("{:?}", v);
-        }
+        //for v in vecs.iter() {
+        //    println!("{:?}", v);
+        //}
         let valley: Vec<Vec<char>> = remove_walls(&vecs);
-        println!("parse_valley");
-        for v in valley.iter() {
-            println!("{:?}", v);
-        }
+        //for v in valley.iter() {
+        //    println!("{:?}", v);
+        //}
         let mut blizzards = locate_blizzards(&valley);
         let mut valley: Valley = Valley::new(blizzards, valley.len(), valley[0].len());
+        let nminutes: u32 = valley.simulate();
 
-        while !valley.destination_reached() {
-            valley.minute();
-            println!("{valley}");
-        }
-        println!("reached in {:?} minutes", valley.counter);
+        println!("reached in {:?} minutes", nminutes);
 
         Ok(())
     }
@@ -304,11 +322,11 @@ mod tests {
         let expedition: IVec2 = IVec2::new(1, 1);
         let mut blizzard: Blizzard = Blizzard::new(expedition, direction);
         let expected: IVec2 = IVec2::new(1, 1);
-        assert_eq!(expected, blizzard.expedition);
+        assert_eq!(expected, blizzard.location);
 
         blizzard.displace();
         let expected: IVec2 = IVec2::new(0, 1);
-        assert_eq!(expected, blizzard.expedition);
+        assert_eq!(expected, blizzard.location);
     }
 
     #[test]
@@ -318,7 +336,7 @@ mod tests {
         let mut blizzard: Blizzard = Blizzard::new(expedition, direction);
         blizzard.displace();
         let expected: IVec2 = IVec2::new(2, 1);
-        assert_eq!(expected, blizzard.expedition);
+        assert_eq!(expected, blizzard.location);
     }
 
     #[test]
@@ -328,7 +346,7 @@ mod tests {
         let mut blizzard: Blizzard = Blizzard::new(expedition, direction);
         blizzard.displace();
         let expected: IVec2 = IVec2::new(1, 2);
-        assert_eq!(expected, blizzard.expedition);
+        assert_eq!(expected, blizzard.location);
     }
 
     #[test]
@@ -338,6 +356,6 @@ mod tests {
         let mut blizzard: Blizzard = Blizzard::new(expedition, direction);
         blizzard.displace();
         let expected: IVec2 = IVec2::new(1, 2);
-        assert_eq!(expected, blizzard.expedition);
+        assert_eq!(expected, blizzard.location);
     }
 }
