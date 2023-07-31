@@ -15,31 +15,27 @@ pub struct Day1a {
 impl CommandImpl for Day1a {
     fn main(&self) -> Result<(), DynError> {
         let lines: Vec<String> = slurp_file(&self.input)?;
-        let mut caloric_total: u32 = 0;
-        let mut max_calories: u32 = 0;
-        let mut sum_top_three: u32 = 0;
-        let mut snacks: Vec<u32> = Vec::new();
+        let mut meal_calories: u32 = 0; # total caloric value per meal
+        let mut max_meal_calories: u32 = 0; # calories of highest calories meal
+        let mut meals: Vec<u32> = Vec::new();
 
         for line in lines {
             if line.is_empty() {
-                let x = caloric_total;
-                snacks.push(x);
-                if caloric_total > max_calories {
-                    max_calories = caloric_total;
+                meals.push(meal_calories);
+                if meal_calories > max_meal_calories {
+                    max_meal_calories = meal_calories;
                 }
-                caloric_total = 0;
+                meal_calories = 0;
             } else {
-                caloric_total += line.parse::<u32>().unwrap();
+                meal_calories += line.parse::<u32>().unwrap();
             }
         }
-        snacks.sort_by(|a, b| b.cmp(a));
-        println!("Max calories {}", max_calories);
-        for n in 0..3 {
-            let snack_cals = snacks[n];
-            println!("Snack cals {}", snack_cals);
-            sum_top_three += snack_cals;
-        }
-        println!("Sum calories of top 3: {}", sum_top_three);
+        println!("The Elf carrying the most calories is carrying {} calories",
+                 max_meal_calories);
+        meals.sort_by(|a, b| b.cmp(a));
+        let sum_top_three: u32 = meals.iter().take(3).sum();
+        println!("The top three Elves carrying the most calories are carrying {} calories",
+                 sum_top_three);
         Ok(())
     }
 }
