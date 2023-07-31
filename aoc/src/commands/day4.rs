@@ -39,13 +39,13 @@ fn new_cleanup_assignment(lower1: u32, upper1: u32, lower2: u32, upper2: u32) ->
 
 impl CleanupAssignment {
     pub fn has_overlap(&mut self) -> bool {
-        (self.first.contains(&self.second.start()) && self.first.contains(&self.second.end())) ||
-            (self.second.contains(&self.first.start()) && self.second.contains(&self.first.end()))
+        (self.first.contains(self.second.start()) && self.first.contains(self.second.end())) ||
+            (self.second.contains(self.first.start()) && self.second.contains(self.first.end()))
     }
 
     pub fn has_any_overlap(&mut self) -> bool {
-        self.first.contains(&self.second.start()) || self.first.contains(&self.second.end()) ||
-            self.second.contains(&self.first.start()) || self.second.contains(&self.first.end())
+        self.first.contains(self.second.start()) || self.first.contains(self.second.end()) ||
+            self.second.contains(self.first.start()) || self.second.contains(self.first.end())
     }
 }
 
