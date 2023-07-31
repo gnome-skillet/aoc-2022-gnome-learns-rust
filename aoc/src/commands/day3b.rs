@@ -17,9 +17,8 @@ impl CommandImpl for Day3b {
         let lines: Vec<String> = slurp_file(&self.input)?;
         let mut badges: Vec<u8> = Vec::new();
         let mut score: usize = 0;
-        let mut i: usize = 0;
 
-        for line in lines {
+        for (i, line) in lines.into_iter().enumerate() {
             println!("Round {} Rucksack :{}", i, line);
             let mut rucksack: Vec<u8> = line.into_bytes();
             rucksack.sort();
@@ -39,7 +38,6 @@ impl CommandImpl for Day3b {
                     badges.clear();
                 }
             }
-            i += 1;
         }
 
         println!("Total Score:{}", score);
