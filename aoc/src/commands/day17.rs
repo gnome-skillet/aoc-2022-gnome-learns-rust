@@ -36,128 +36,82 @@ impl JetDirection {
 }
 
 pub trait Projectile {
-    fn can_move_down(&self, chamber: &Space) -> bool;
-    fn can_move_left(&self, chamber: &Space) -> bool;
-    fn can_move_right(&self, chamber: &Space) -> bool;
+    fn can_move_down(&self) -> bool;
+    fn can_move_left(&self) -> bool;
+    fn can_move_right(&self) -> bool;
     fn move_down(&mut self);
     fn move_left(&mut self);
     fn move_right(&mut self);
-    fn come_to_rest(&self, chamber: &mut Space);
-    fn leftmost_point(&self) -> Option<u64>;
-    fn rightmost_point(&self) -> Option<u64>;
-    fn lowest_point(&self) -> Option<u64>;
-    fn highest_point(&self) -> Option<u64>;
+    fn lowest_point(&self) -> u64;
+    fn highest_point(&self) -> u64;
     fn shape(&self) -> &'static str;
     fn display(&self);
 }
 
 #[derive(Debug)]
 pub struct Rock {
-    points: Vec<(u64, u64)>,
+    points: Vec<u8>,
+    offset: u64,
 }
 
-struct OccupiedSpaces {
-    points: Vec<(u64, u64)>,
-}
-
-pub fn plank(start: (u64, u64)) -> Rock {
+pub fn plank(offset: u64) -> Rock {
     //println!("plank({:?})", start);
-    Rock {
-        points: vec![
-            (start.0 + 0, start.1),
-            (start.0 + 1, start.1),
-            (start.0 + 2, start.1),
-            (start.0 + 3, start.1),
-        ],
-    }
+    Rock { points: vec![30 as u8], offset: offset }
 }
 
-pub fn cross(start: (u64, u64)) -> Rock {
+pub fn cross(offset: u64) -> Rock {
     //println!("cross({:?})", start);
-    Rock {
-        points: vec![
-            (start.0 + 1, start.1),
-            (start.0 + 0, start.1 + 1),
-            (start.0 + 1, start.1 + 1),
-            (start.0 + 2, start.1 + 1),
-            (start.0 + 1, start.1 + 2),
-        ],
-    }
+    Rock { points: vec![8u8, 28u8, 8u8], offset }
 }
 
-pub fn ell(start: (u64, u64)) -> Rock {
+pub fn ell(offset: u64) -> Rock {
     //println!("ell({:?})", start);
-    Rock {
-        points: vec![
-            (start.0 + 0, start.1),
-            (start.0 + 1, start.1),
-            (start.0 + 2, start.1),
-            (start.0 + 2, start.1 + 1),
-            (start.0 + 2, start.1 + 2),
-        ],
-    }
+    Rock { points: vec![28u8, 4u8, 4u8], offset }
 }
 
-pub fn pole(start: (u64, u64)) -> Rock {
+pub fn pole(offset: u64) -> Rock {
     //println!("pole({:?})", start);
-    Rock { points: (0..4).map(|y| (start.0, start.1 + y)).collect() }
+    Rock { points: vec![16u8, 16u8, 16u8, 16u8], offset }
 }
 
-pub fn block(start: (u64, u64)) -> Rock {
+pub fn block(offset: u64) -> Rock {
     //println!("block({:?})", start);
-    Rock {
-        points: vec![
-            (start.0 + 0, start.1),
-            (start.0 + 1, start.1),
-            (start.0 + 0, start.1 + 1),
-            (start.0 + 1, start.1 + 1),
-        ],
-    }
+    Rock { points: vec![24u8, 24u8], offset }
 }
 
 impl Projectile for Rock {
     fn move_down(&mut self) {
-        self.points = self.points.iter().map(|(x, y)| (*x, y - 1)).collect::<Vec<(u64, u64)>>();
+        self.offset -= 1;
     }
 
     fn move_left(&mut self) {
-        self.points = self.points.iter().map(|(x, y)| (x - 1, *y)).collect::<Vec<(u64, u64)>>();
+        if self.can_move_left() {
+            self.points.iter_mut().map(|x| *x <<= 1).collect::<Vec<_>>();
+        }
     }
 
     fn move_right(&mut self) {
-        self.points = self.points.iter().map(|(x, y)| (x + 1, *y)).collect::<Vec<(u64, u64)>>();
+        self.points.iter_mut().map(|x| *x >>= 1).collect::<Vec<_>>();
     }
 
-    fn can_move_down(&self, chamber: &Space) -> bool {
-        let lowest_point = self.lowest_point().unwrap();
-        !(lowest_point == 0
-            || self.points.iter().any(|p| chamber.occupied_space.contains(&(p.0, p.1 - 1))))
+    fn can_move_down(&self) -> bool {
+        self.offset > 0
     }
 
-    fn can_move_left(&self, chamber: &Space) -> bool {
-        !(self.leftmost_point() == Some(0)
-            || self.points.iter().any(|p| chamber.occupied_space.contains(&(p.0 - 1, p.1))))
+    fn can_move_left(&self) -> bool {
+        self.points.iter().all(|p| p & 64u8 == 0)
     }
 
-    fn can_move_right(&self, chamber: &Space) -> bool {
-        !(self.rightmost_point() == Some(6)
-            || self.points.iter().any(|p| chamber.occupied_space.contains(&(p.0 + 1, p.1))))
+    fn can_move_right(&self) -> bool {
+        self.points.iter().all(|p| p & 1u8 == 0)
     }
 
-    fn leftmost_point(&self) -> Option<u64> {
-        self.points.iter().map(|(x, _)| x).min().copied()
+    fn highest_point(&self) -> u64 {
+        self.offset + self.points.len() as u64
     }
 
-    fn rightmost_point(&self) -> Option<u64> {
-        self.points.iter().map(|(x, _)| x).max().copied()
-    }
-
-    fn highest_point(&self) -> Option<u64> {
-        self.points.iter().map(|(_, y)| y).max().copied()
-    }
-
-    fn lowest_point(&self) -> Option<u64> {
-        self.points.iter().map(|(_, y)| y).min().copied()
+    fn lowest_point(&self) -> u64 {
+        self.offset as u64
     }
 
     fn shape(&self) -> &'static str {
@@ -166,62 +120,53 @@ impl Projectile for Rock {
     }
 
     fn display(&self) {
-        println!("{:?}", self.points);
-    }
-
-    fn come_to_rest(&self, chamber: &mut Space) {
-        chamber.occupied_space.extend(self.points.iter().cloned());
-        chamber.starting_position = (chamber.starting_position.0, chamber.top().unwrap() + 4);
+        for point in self.points.iter().rev() {
+            println!("{point:0>7b}");
+        }
+        println!("");
     }
 }
 
 #[derive(Debug)]
-pub struct Space {
-    occupied_space: HashSet<(u64, u64)>,
-    starting_position: (u64, u64),
+pub struct RockPile {
+    rocks: Vec<u8>,
+    offset: u64,
 }
 
-impl Space {
-    fn new() -> Space {
-        Space {
-            occupied_space: HashSet::from([
-                (0u64, 0u64),
-                (1, 0),
-                (2, 0),
-                (3, 0),
-                (4, 0),
-                (5, 0),
-                (6, 0),
-            ]),
-            starting_position: (2, 4),
-        }
+impl RockPile {
+    fn new() -> RockPile {
+        RockPile { rocks: vec![255u8, 1], offset: 0 }
     }
 
-    fn top(&self) -> Option<u64> {
-        self.occupied_space.iter().map(|(_, y)| y).max().copied()
+    // index of first rock formation above floor
+    fn tallest_point(&self) -> u64 {
+        self.offset + self.rocks.len() as u64 - 1
+    }
+
+    fn is_blocked(&self, rock: &Rock) -> bool {
+        rock.points.iter().any(|p| self.rocks.contains(p))
     }
 
     fn is_open(&self, rock: &Rock) -> bool {
-        !rock.points.iter().any(|p| self.occupied_space.contains(p))
+        !self.is_blocked(rock)
     }
 
     fn display(&self) {
-        for y in (0..self.top().unwrap() + 1).rev() {
-            for x in 0..7 {
-                let point: (u64, u64) = (x, y);
-                //print!("{:?}", point);
-                if self.occupied_space.contains(&point) {
-                    print!("#");
-                } else {
-                    print!(".");
-                }
-            }
-            println!("");
+        for point in self.rocks.iter().rev() {
+            println!("{point:0>7b}");
         }
+        println!("");
     }
 
     fn is_covered(&mut self, row: u64) -> bool {
-        (0..7).into_iter().map(|x| (x, row)).all(|p| self.occupied_space.contains(&p))
+        //(0..7).into_iter().map(|x| (x, row)).all(|p| self.rocks.contains(&p))
+        todo!()
+    }
+
+    fn collapse(&mut self, nlevels: usize) {
+        assert!(self.rocks.len() > nlevels);
+        self.rocks.drain(0..nlevels);
+        self.offset += nlevels as u64;
     }
 }
 
@@ -235,7 +180,7 @@ pub enum RockShape {
 }
 
 impl RockShape {
-    pub fn projectile(&self, start: (u64, u64)) -> Box<dyn Projectile> {
+    pub fn projectile(&self, start: u64) -> Box<dyn Projectile> {
         match self {
             RockShape::Plank => Box::new(plank(start)),
             RockShape::Cross => Box::new(cross(start)),
@@ -251,7 +196,9 @@ fn parse_jets(input: &str) -> IResult<&str, Vec<char>> {
     Ok((input, vecs))
 }
 
-const NUM_ROCKS: u64 = 2022;
+//const NUM_ROCKS: u64 = 2022;
+const NUM_ROCKS: u64 = 5;
+const ROCK_OFFSET: u64 = 4;
 //const NUM_ROCKS: u64 = 1000000000000;
 //const NUM_ROCKS: usize = 2;
 
@@ -264,8 +211,8 @@ impl CommandImpl for Day17 {
         let mut jet_iter = jets.iter().cycle();
 
         let mut n: u64 = 0;
-        let mut chamber = Space::new();
-        //println!("Chamber: {:?}", chamber);
+        let mut rock_pile = RockPile::new();
+        //println!("rock_pile: {:?}", rock_pile);
         let N_JETS: u64 = jets.len() as u64;
         const N_SHAPES: u64 = 5;
         println!("njets = {N_JETS}, n_shapes = {N_SHAPES}");
@@ -273,7 +220,8 @@ impl CommandImpl for Day17 {
         let mut njets: u64 = 0;
         let mut nshapes: u64 = 0;
         for shape in RockShape::iter().cycle() {
-            let mut rock = shape.projectile(chamber.starting_position);
+            let mut rock = shape.projectile(rock_pile.tallest_point());
+            rock.display();
             nshapes += 1;
             //println!("{:?}:{:?}", shape, rock.shape());
             //rock.display();
@@ -283,43 +231,38 @@ impl CommandImpl for Day17 {
                 //print!("move {:?}", jet);
                 match *jet.unwrap() {
                     JetDirection::Left => {
-                        if rock.can_move_left(&chamber) {
+                        if rock.can_move_left() {
                             rock.move_left();
+                            println!("left");
+                            rock.display();
                         }
                     }
                     JetDirection::Right => {
-                        if rock.can_move_right(&chamber) {
+                        if rock.can_move_right() {
                             rock.move_right();
+                            println!("right");
+                            rock.display();
                         }
                     }
                     _ => println!("panic"),
                 }
                 //print!("move {j}");
                 //rock.display();
-                if rock.can_move_down(&chamber) {
+                if rock.can_move_down() {
                     rock.move_down();
                 } else {
                     //println!("break loop");
-                    rock.come_to_rest(&mut chamber);
+                    //rock_pile.add(&mut rock);
                     break;
                 }
             }
 
-            if nshapes.rem_euclid(N_SHAPES) == 0
-                && njets.rem_euclid(N_JETS) == 0
-                && chamber.is_covered(chamber.top().unwrap())
-            {
-                println!("cycle(nshapes = {nshapes}, njets = {njets})");
-            }
-            //println!("loop broken");
-            //println!("{:?}", chamber);
-            //chamber.display();
             n = n + 1;
             if n == NUM_ROCKS {
                 break;
             }
         }
-        println!("top {:?}", chamber.top());
+        println!("top {:?}", rock_pile.tallest_point());
 
         Ok(())
     }
