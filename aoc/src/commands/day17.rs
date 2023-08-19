@@ -1,15 +1,19 @@
 use camino::Utf8PathBuf;
 
-use std::{collections::HashSet, error::Error, fmt, fs, io};
+use std::{collections::HashSet, env, error::Error, fmt, fs, io};
 
 use clap::Parser;
 
 use super::{CommandImpl, DynError};
 
+use std::collections::VecDeque;
+
 use nom::{character::complete::one_of, multi::many1, *};
 use strum::IntoEnumIterator; // 0.17.1
 use strum_macros::EnumIter; // 0.17.1
-                            //
+
+use env_logger::Env;
+
 #[derive(Parser, Debug)]
 pub struct Day17 {
     #[clap(long, short)]
@@ -37,100 +41,104 @@ impl JetDirection {
 
 #[derive(Debug)]
 pub struct Rock {
-    row: Vec<u8>,
+    row: VecDeque<u8>,
     offset: usize,
 }
 
 pub fn plank(offset: usize) -> Rock {
-    Rock { row: vec![30_u8], offset }
+    let row: VecDeque<u8> = VecDeque::from([30_u8]);
+    Rock { row, offset }
 }
 
 pub fn cross(offset: usize) -> Rock {
-    Rock { row: vec![8_u8, 28_u8, 8_u8], offset }
+    let row: VecDeque<u8> = VecDeque::from([8_u8, 28_u8, 8_u8]);
+    Rock { row, offset }
 }
 
 pub fn ell(offset: usize) -> Rock {
-    Rock { row: vec![28_u8, 4_u8, 4_u8], offset }
+    let row: VecDeque<u8> = VecDeque::from([28_u8, 4_u8, 4_u8]);
+    Rock { row, offset }
 }
 
 pub fn pole(offset: usize) -> Rock {
-    Rock { row: vec![16_u8, 16_u8, 16_u8, 16_u8], offset }
+    let row: VecDeque<u8> = VecDeque::from([16_u8, 16_u8, 16_u8, 16_u8]);
+    Rock { row, offset }
 }
 
 pub fn block(offset: usize) -> Rock {
-    Rock { row: vec![24_u8, 24_u8], offset }
+    let row: VecDeque<u8> = VecDeque::from([24_u8, 24_u8]);
+    Rock { row, offset }
 }
 
 // determine if the left shifted new block is disjoint with old block
 pub fn left_disjoint(shifted_block: u8, old_block: u8) -> bool {
+    log::debug!("left_disjoint({shifted_block:0>7b}, {old_block:0>7b})");
     disjoint(shifted_block << 1, old_block)
 }
 
 // determine if the right shifted new block is disjoint with old block
 pub fn right_disjoint(shifted_block: u8, old_block: u8) -> bool {
-    disjoint(shifted_block >> 1, old_block)
+    let x = disjoint(shifted_block >> 1, old_block);
+    log::debug!("right_disjoint({shifted_block:0>7b}, {old_block:0>7b}) = {x}");
+    x
+}
+
+pub fn next_left_wall(shift_block: u8) -> bool {
+    (shift_block & 64_u8) > 0
 }
 
 // determine if the new block is disjoint with the old block
 pub fn disjoint(this_block: u8, that_block: u8) -> bool {
-    this_block & that_block == 0
-}
-
-// combine shifted_block and old_block
-pub fn combine(shifted_block: usize, old_block: usize) -> usize {
-    shifted_block | old_block
+    log::debug!(
+        "disjoint(this_block: {this_block:0>7b}, that_block: {that_block:0>7b}) = {:?}",
+        (this_block & that_block) == 0
+    );
+    (this_block & that_block) == 0
 }
 
 impl Rock {
     fn move_down(&mut self) {
+        log::debug!("move_down");
         self.offset -= 1;
     }
 
-    fn move_left(&mut self) {
-        if self.can_move_left() {
-            //self.row.iter_mut().map(|x| *x <<= 1).collect::<Vec<_>>();
-            for x in self.row.iter_mut() {
-                *x <<= 1;
-            }
+    fn pop_front(&mut self) -> Option<u8> {
+        if !self.row.is_empty() {
+            self.offset += 1;
         }
+        self.row.pop_front()
+    }
+
+    fn move_left(&mut self) {
+        log::debug!("Rock.move_left");
+        //self.row.iter_mut().map(|x| *x <<= 1).collect::<Vec<_>>();
+        for x in self.row.iter_mut() {
+            *x <<= 1;
+        }
+        //self.display();
     }
 
     fn move_right(&mut self) {
-        if self.can_move_right() {
-            //self.row.iter_mut().map(|x| *x >>= 1).collect::<Vec<_>>();
-            for x in self.row.iter_mut() {
-                *x >>= 1;
-            }
+        log::debug!("Rock.move_right");
+        //self.row.iter_mut().map(|x| *x >>= 1).collect::<Vec<_>>();
+        for x in self.row.iter_mut() {
+            *x >>= 1;
         }
+        //self.display();
     }
 
-    fn has_hit_bottom(&self) -> bool {
-        self.offset > 0
+    fn is_left_blocked(&self) -> bool {
+        log::debug!("Rock.is_left_blocked");
+        self.row.iter().any(|p| (p & 64_u8) > 0)
     }
 
-    fn can_move_left(&self) -> bool {
-        self.row.iter().all(|p| p & 64u8 == 0)
-    }
-
-    fn can_move_right(&self) -> bool {
-        self.row.iter().all(|p| p & 1u8 == 0)
-    }
-
-    fn highest_point(&self) -> usize {
-        self.offset + self.row.len() as usize - 1
-    }
-
-    fn lowest_point(&self) -> usize {
-        self.offset as usize
-    }
-
-    fn shape(&self) -> &'static str {
-        //format!("rock {:?}", self.row).as_str()
-        "rock"
+    fn is_right_blocked(&self) -> bool {
+        log::debug!("Rock.is_right_blocked");
+        self.row.iter().any(|p| (p & 1_u8) > 0)
     }
 
     fn display(&self) {
-        println!("offset: {:?}", self.offset);
+        println!("Rock.display: {:?}", self.offset);
         for point in self.row.iter().rev() {
             println!("{point:0>7b}");
         }
@@ -138,87 +146,165 @@ impl Rock {
     }
 
     fn offset(&self) -> usize {
+        log::debug!("Rock.offset: {:?}", self.offset);
         self.offset
     }
 
-    fn row(&self, row_index: usize) -> u8 {
-        println!("row: {row_index} - {:?}", self.offset);
-        let index = (row_index - self.offset);
-        self.row[index as usize]
+    fn row(&self, index: usize) -> u8 {
+        log::debug!("Rock.row: {index} = {:0>7b}", self.row[index]);
+        self.row[index]
+    }
+
+    fn has_layers(&self) -> bool {
+        self.row.len() > 0
+    }
+
+    fn nlayers(&self) -> usize {
+        log::debug!("Rock.nlayers: {:?}", self.row.len());
+        self.row.len()
     }
 }
 
 #[derive(Debug)]
 pub struct RockPile {
-    rocks: Vec<u8>,
+    rocks: VecDeque<u8>,
     offset: usize,
     nrocks: usize,
 }
 
 impl RockPile {
     fn new() -> RockPile {
-        RockPile { rocks: vec![255u8, 1], offset: 0, nrocks: 0 }
+        let rocks: VecDeque<u8> = VecDeque::from([0_u8]);
+        RockPile { rocks, offset: 0, nrocks: 0 }
+    }
+
+    fn height(&self) -> usize {
+        self.rocks.len() + self.offset
     }
 
     fn add_row(&mut self, row: usize, rock: u8) {
+        log::debug!("RockPile.add_row: {row}");
+        //self.display();
         self.rocks[row] = rock;
     }
 
-    // index of tallest rock above floor
-    fn highest_point(&self) -> usize {
-        if self.rocks.len() > 0 {
-            self.offset
-        } else {
-            self.offset + self.rocks.len() - 1
-        }
+    fn nlayers(&self) -> usize {
+        log::debug!("RockPile.nlayers: {:?}", self.rocks.len());
+        self.rocks.len()
     }
 
-    fn is_blocked(&self, rock: &Rock) -> bool {
-        if rock.offset() > (self.highest_point() + 1) {
-            return false;
+    fn is_blocked_below(&self, rock: &Rock) -> bool {
+        log::debug!("RockPile.is_blocked_below");
+        if rock.offset() == 0 {
+            log::debug!("    rock.offset() == 0");
+            return true;
         }
-        let rock_row: u8 = rock.row(1);
-        let rockpile_row: u8 = self.rocks[0];
-        //let highest_row: Vec<usize> = vec![self.highest_point(), rock.highest_point()];
-        //let lowest_high_point = highest_row.iter().min().unwrap();
-        //let j = 0;
-        //for i in rock.offset()..*lowest_high_point {}
-        //rock.row.iter().any(|p| self.rocks.contains(p))
-        !disjoint(rock_row, rockpile_row)
+        if rock.offset() <= self.rocks.len() {
+            let start: usize = rock.offset() - 1;
+            let j: usize = 0;
+            for i in start..self.rocks.len() {
+                //let shifted_rock: u8 = rock.row(j) << 1;
+                let curr_rock: u8 = rock.row(j);
+                if !disjoint(curr_rock, self.rocks[i]) {
+                    log::debug!("    !disjoint");
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
-    fn is_open(&self, rock: &Rock) -> bool {
-        !self.is_blocked(rock)
+    fn action_display(&self, rock: &Rock) {
+        let vec: VecDeque<u8> = self.rocks.clone();
+    }
+
+    fn is_blocked_left(&self, rock: &Rock) -> bool {
+        log::debug!("RockPile.is_blocked_left");
+        if rock.is_left_blocked() {
+            log::debug!("    rock.is_left_blocked() == true");
+            //rock.display();
+            return true;
+        }
+        if rock.offset() <= self.rocks.len() {
+            let start: usize = rock.offset();
+            let end: usize = rock.offset() + rock.nlayers();
+            let end: usize = if end < self.nlayers() { end } else { self.nlayers() };
+            let mut j: usize = 0;
+            for i in start..end {
+                if !disjoint(rock.row(j) << 1, self.rocks[i]) {
+                    log::debug!("!disjoint(rock.row({j}))== true");
+                    return true;
+                }
+                j += 1;
+            }
+        }
+
+        log::debug!("is_blocked_left()== false");
+        return false;
+    }
+
+    fn is_blocked_right(&self, rock: &Rock) -> bool {
+        log::debug!("RockPile.is_blocked_right");
+        if rock.is_right_blocked() {
+            return true;
+        }
+        if rock.offset() <= self.rocks.len() {
+            let start: usize = rock.offset();
+            let end: usize = rock.offset() + rock.nlayers();
+            let end: usize = if end < self.nlayers() { end } else { self.nlayers() };
+
+            let mut j: usize = 0;
+            for i in start..end {
+                if !disjoint(rock.row(j) >> 1, self.rocks[i]) {
+                    return true;
+                }
+                j += 1;
+            }
+        }
+
+        return false;
+    }
+
+    fn add_rock_to_pile(&mut self, rock: &mut Rock) {
+        log::debug!("RockPile.add_rock_to_pile");
+
+        while rock.has_layers() {
+            if rock.offset() < self.rocks.len() {
+                let p = if let Some(p) = rock.pop_front() { p } else { todo!() };
+                let i: usize = rock.offset() - 1;
+                log::debug!("index: {i}, p: {p}, self.rocks[{i}]");
+                self.rocks[i] = self.rocks[i] | p;
+            } else {
+                let p = if let Some(p) = rock.pop_front() { p } else { todo!() };
+                self.rocks.push_back(p);
+            }
+        }
+        self.nrocks += 1;
     }
 
     fn display(&self) {
+        println!("RockPile::display: {:?}", self.offset);
         for point in self.rocks.iter().rev() {
             println!("{point:0>7b}");
         }
         println!();
     }
 
-    //fn is_covered(&mut self, row: usize) -> bool {
-    //(0..7).into_iter().map(|x| (x, row)).all(|p| self.rocks.contains(&p))
-    //    todo!()
-    //}
-
     fn collapse(&mut self, nlevels: usize) {
+        log::debug!("RockPile::collapse: {nlevels}");
         assert!(self.rocks.len() > nlevels);
         self.rocks.drain(0..nlevels);
         self.offset += nlevels as usize;
     }
 
     fn new_rock(&mut self, rock_shape: RockShape) -> Box<Rock> {
-        println!("new_rock({:?})", rock_shape);
-        rock_shape.projectile(self.highest_point() + 3)
-    }
-
-    fn add_rock_to_pile(&mut self, rock: &Rock) {
-        self.nrocks += 1;
+        log::debug!("new_rock({:?})", rock_shape);
+        rock_shape.projectile(self.nlayers() + ROCK_OFFSET)
     }
 
     fn rock_count(&self) -> usize {
+        log::debug!("RockPile::rock_count");
         self.nrocks
     }
 }
@@ -249,9 +335,8 @@ fn parse_jets(input: &str) -> IResult<&str, Vec<char>> {
     Ok((input, vecs))
 }
 
-const NUM_ROCKS: usize = 5;
-const ROCK_OFFSET: usize = 3;
-//const NUM_ROCKS: usize = 2022;
+const NUM_ROCKS: usize = 3;
+const ROCK_OFFSET: usize = 2;
 //const NUM_ROCKS: usize = 1000000000000;
 
 fn get_jetstream(path: &Utf8PathBuf) -> Vec<JetDirection> {
@@ -262,34 +347,49 @@ fn get_jetstream(path: &Utf8PathBuf) -> Vec<JetDirection> {
 
 impl CommandImpl for Day17 {
     fn main(&self) -> Result<(), DynError> {
+        let env = Env::default()
+            .filter_or("MY_LOG_LEVEL", "warn")
+            .write_style_or("MY_LOG_STYLE", "always");
+        env_logger::init_from_env(env);
+
         let jets: Vec<JetDirection> = get_jetstream(&self.input);
         let mut jetstream = jets.iter().cycle();
-
         let mut rock_pile = RockPile::new();
 
         for shape in RockShape::iter().cycle() {
             let mut rock = rock_pile.new_rock(shape);
-            println!("init");
-            rock.display();
             loop {
                 let jet = jetstream.next();
                 match *jet.unwrap() {
                     JetDirection::Left => {
-                        println!("left");
-                        rock.move_left();
+                        if !rock_pile.is_blocked_left(&rock) {
+                            println!("Jet of gas pushes rock left\n");
+                            rock.move_left();
+                        } else {
+                            println!("Jet of gas pushes rock left, but nothing happens\n");
+                        }
                     }
                     JetDirection::Right => {
-                        println!("right");
-                        rock.move_right();
+                        if !rock_pile.is_blocked_right(&rock) {
+                            println!("Jet of gas pushes rock right\n");
+                            rock.move_right();
+                        } else {
+                            println!("Jet of gas pushes rock right, but nothing happens\n");
+                        }
                     }
-                    _ => println!("panic"),
+                    _ => {
+                        log::debug!("panic");
+                    }
                 }
-                rock.display();
-                if !rock.has_hit_bottom() {
-                    rock.move_down();
-                } else {
-                    rock_pile.add_rock_to_pile(&rock);
+                if rock_pile.is_blocked_below(&rock) {
+                    println!("Rock falls 1 unit, causing it to come to rest\n");
+                    rock_pile.add_rock_to_pile(&mut rock);
+                    rock_pile.display();
                     break;
+                } else {
+                    println!("Rock falls 1 unit\n");
+                    rock.move_down();
+                    rock.display();
                 }
             }
 
@@ -297,15 +397,9 @@ impl CommandImpl for Day17 {
                 break;
             }
         }
-        println!("top {:?}", rock_pile.highest_point());
-        let mut rock_pile = RockPile::new();
-        rock_pile.add_row(0, 63u8);
-        let rock = plank(1);
-        rock.display();
-        rock_pile.display();
-        let blocked: bool = rock_pile.is_blocked(&rock);
-        println!("blocked = {blocked}");
 
+        let height: usize = rock_pile.height();
+        println!("height = {height}");
         Ok(())
     }
 }
@@ -313,18 +407,6 @@ impl CommandImpl for Day17 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn combine_works() {
-        let shifted_block = 1;
-        let old_block = 2;
-        assert_eq!(
-            combine(shifted_block, old_block),
-            3,
-            "Expect {shifted_block:0>7b} | {old_block:0>7b} = {:0>7b}",
-            3
-        );
-    }
 
     #[test]
     fn disjoint_works() {
@@ -373,10 +455,10 @@ mod tests {
         let mut rock_pile = RockPile::new();
         rock_pile.add_row(0, 0u8);
         let rock = plank(2);
-        assert!(!rock_pile.is_blocked(&rock), "Expect rockpile does not block rock",);
+        assert!(!rock_pile.is_blocked_left(&rock), "Expect rockpile does not block rock",);
 
-        let rock = plank(1);
-        rock_pile.add_row(0, 63u8);
-        assert!(rock_pile.is_blocked(&rock), "Expect rockpile blocks rock",);
+        //let rock = plank(1);
+        //rock_pile.add_row(0, 63u8);
+        //assert!(rock_pile.is_blocked_left(&rock), "Expect rockpile blocks rock",);
     }
 }
