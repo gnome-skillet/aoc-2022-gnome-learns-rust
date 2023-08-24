@@ -122,10 +122,12 @@ impl Rock {
         self.row.iter().any(|p| (p & 1_u8) > 0)
     }
 
+    #[allow(dead_code)]
     fn display(&self) {
         let string =
             self.row.iter().rev().map(|x| format!("{x:07b}")).collect::<Vec<String>>().join("\n");
         let string = string.replace("1", "x");
+        let string = string.replace("0", ".");
         println!("{}", string);
     }
 
@@ -144,6 +146,10 @@ impl Rock {
     fn nlayers(&self) -> usize {
         self.row.len()
     }
+
+    fn height(&self) -> usize {
+        self.row.len() + self.offset
+    }
 }
 
 pub struct RockPile {
@@ -157,6 +163,7 @@ impl RockPile {
         let rocks: VecDeque<u8> = VecDeque::new();
         RockPile { rocks, offset: 0, nrocks: 0 }
     }
+
     #[allow(dead_code)]
     fn height(&self) -> usize {
         self.rocks.len() + self.offset
@@ -177,10 +184,12 @@ impl RockPile {
         }
         if rock.offset() <= self.rocks.len() {
             let start: usize = rock.offset() - 1;
-            let j: usize = 0;
-            for i in start..self.rocks.len() {
-                let curr_rock: u8 = rock.row(j);
-                if !disjoint(curr_rock, self.rocks[i]) {
+            for (i, j) in (start..self.rocks.len()).enumerate() {
+                if i >= rock.nlayers() {
+                    break;
+                }
+                let curr_rock: u8 = rock.row(i);
+                if !disjoint(curr_rock, self.rocks[j]) {
                     return true;
                 }
             }
@@ -242,71 +251,62 @@ impl RockPile {
         self.nrocks += 1;
     }
 
+    #[allow(dead_code)]
     fn display(&self) {
-        //for point in self.rocks.iter().rev() {
-        //    let x = format!("{point:0>7b}");
-        //    let x = x.replace("1", "#");
-        //    println!("{}", x);
-        //}
         let string =
             self.rocks.iter().rev().map(|x| format!("{x:07b}")).collect::<Vec<String>>().join("\n");
         let string = string.replace("1", "#");
+        let string = string.replace("0", ".");
         let nrocks: usize = self.nrocks;
         let height: usize = self.nlayers();
         let msg = format!("After {nrocks} rocks, the tower of rocks will be {height} units tall");
         println!("{}\n{}", msg, string);
     }
 
-    fn nrocks(&self) -> usize {
-        self.nrocks
+    #[allow(dead_code)]
+    fn dump(&self) {
+        println!("{:?}", self.rocks);
     }
 
     fn build_pile(&mut self, jets: Vec<JetDirection>, nrocks: usize, debug: bool) {
         let mut jetstream = jets.iter().cycle();
-        let mut x: usize = 1;
+        let mut x: usize = 0;
         for shape in RockShape::iter().cycle() {
             let mut rock = self.new_rock(shape);
-            if debug {
-                println!("A new rock begins falling:");
-                rock.display();
-                println!();
-            }
+            x += 1;
+            let mut steps: usize = 1;
             loop {
                 let jet = jetstream.next();
                 match *jet.unwrap() {
                     JetDirection::Left => {
+                        if debug {
+                            print!("{x},{steps},left,");
+                        }
                         if !self.is_blocked_left(&rock) {
-                            rock.move_left();
                             if debug {
-                                println!("step {x}: Jet of gas pushes rock left:");
-                                rock.display();
-                                println!();
+                                print!("unblocked,");
                             }
+                            rock.move_left();
                         } else {
                             if debug {
-                                println!(
-                                    "step {x}: Jet of gas pushes rock left, but nothing happens:"
-                                );
-                                rock.display();
-                                println!();
+                                if debug {
+                                    print!("blocked,");
+                                }
                             }
                         }
                     }
                     JetDirection::Right => {
+                        if debug {
+                            print!("{x},{steps},right,");
+                        }
                         if !self.is_blocked_right(&rock) {
-                            rock.move_right();
                             if debug {
-                                println!("step {x}: Jet of gas pushes rock right:");
-                                rock.display();
-                                println!();
+                                print!("unblocked,");
                             }
+                            rock.move_right();
                         } else {
                             if debug {
-                                println!(
-                                    "step {x}: Jet of gas pushes rock right, but nothing happens:"
-                                );
-                                rock.display();
-                                println!();
+                                print!("blocked,");
                             }
                         }
                     }
@@ -314,22 +314,31 @@ impl RockPile {
                         log::debug!("panic");
                     }
                 }
-                x += 1;
+                if debug {
+                    print!("down,");
+                }
                 if self.is_blocked_below(&rock) {
                     self.add_rock_to_pile(&mut rock);
                     if debug {
-                        println!("Rock falls 1 unit, causing it come to rest:");
-                        self.display();
-                        println!();
+                        println!("blocked,{:?}", self.nlayers());
                     }
                     break;
                 } else {
                     rock.move_down();
                     if debug {
-                        println!("Rock falls 1 unit:");
-                        rock.display();
-                        println!();
+                        println!("unblocked,{:?}", self.nlayers());
                     }
+                }
+                steps += 1;
+            }
+            if self.rock_count() == 50 {
+                //println!("{steps} mod {MAX_CYCLE} == {:?}", steps.rem_euclid(MAX_CYCLE));
+            }
+            if self.rock_count().rem_euclid(MAX_CYCLE) == 0 {
+                //println!("hit {MAX_CYCLE} at {steps}");
+                if let Some(index) = self.highest_plateau() {
+                    // println!("collapse at {index}");
+                    self.collapse(index);
                 }
             }
             if self.rock_count() == nrocks {
@@ -338,14 +347,22 @@ impl RockPile {
         }
     }
 
-    //fn collapse(&mut self, nlevels: usize) {
-    //    log::debug!("RockPile::collapse: {nlevels}");
-    //    assert!(self.rocks.len() > nlevels);
-    //    self.rocks.drain(0..nlevels);
-    //    self.offset += nlevels as usize;
-    //}
+    fn highest_plateau(&mut self) -> Option<usize> {
+        if let Some(index) = self.rocks.iter().rev().position(|c| *c == 127_u8) {
+            return Some(self.rocks.len() - index);
+        }
+        None
+    }
+
+    fn collapse(&mut self, nlevels: usize) {
+        log::debug!("RockPile::collapse: {nlevels}");
+        assert!(self.rocks.len() > nlevels);
+        self.rocks.drain(0..nlevels);
+        self.offset += nlevels as usize;
+    }
 
     fn new_rock(&mut self, rock_shape: RockShape) -> Box<Rock> {
+        //println!("starting position (2, {:?})", self.nlayers() + ROCK_OFFSET);
         rock_shape.projectile(self.nlayers() + ROCK_OFFSET)
     }
 
@@ -382,8 +399,8 @@ fn parse_jets(input: &str) -> IResult<&str, Vec<char>> {
 }
 
 #[allow(dead_code)]
-const NUM_ROCKS: usize = 2;
 const ROCK_OFFSET: usize = 3;
+const MAX_CYCLE: usize = 100000;
 //const NUM_ROCKS: usize = 1000000000000;
 
 #[allow(dead_code)]
@@ -402,25 +419,12 @@ impl CommandImpl for Day17 {
 
         let jets: Vec<JetDirection> = get_jetstream(&self.input);
         let mut rock_pile = RockPile::new();
-        rock_pile.build_pile(jets, 2022, false);
-        //rock_pile.display();
+        //rock_pile.build_pile(jets, 2022, false);
+        rock_pile.build_pile(jets, 10000000, false);
+        //rock_pile.build_pile(jets, 2022, false);
+        println!("the rock pile is {:?} tall", rock_pile.height());
+        //rock_pile.dump();
 
-        let height: usize = rock_pile.nlayers();
-        let nrocks: usize = rock_pile.nrocks();
-        println!("After {nrocks} rocks, the tower of rocks will be {height} units tall");
-        //let jets: Vec<JetDirection> = vec![
-        //    JetDirection::Left,
-        //    JetDirection::Left,
-        //    JetDirection::Left,
-        //    JetDirection::Left,
-        //    JetDirection::Right,
-        //   JetDirection::Right,
-        //   JetDirection::Right,
-        //   JetDirection::Right,
-        //];
-        //let mut rock_pile = RockPile::new();
-        //rock_pile.build_pile(jets, 3, true);
-        //rock_pile.display();
         Ok(())
     }
 }
