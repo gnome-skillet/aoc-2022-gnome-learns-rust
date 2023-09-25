@@ -2,6 +2,8 @@ use clap::Parser;
 
 use glam::IVec2;
 
+use itertools::iproduct;
+
 use super::{CommandImpl, DynError};
 
 use std::collections::HashSet;
@@ -37,18 +39,19 @@ enum Direction {
 
 fn parse_valley(input: &str) -> IResult<&str, Valley> {
     let (input, vecs) = separated_list1(newline, many1(one_of(".#")))(input)?;
-    let mut occupied_spaces: Vec<IVec2> = Vec::new();
+    let mut occupied_vec: Vec<IVec2> = Vec::new();
     let mut space: Vec<Vec<bool>> = get_empty_valley(vecs.len(), vecs[0].len());
     for (y, l) in vecs.iter().enumerate() {
         for (x, p) in l.iter().enumerate() {
             if *p == '#' {
                 let elf: IVec2 = IVec2::new(x as i32, y as i32);
-                occupied_spaces.push(elf);
+                occupied_vec.push(elf);
                 space[y][x] = true;
             }
         }
     }
-    let valley = Valley::new(occupied_spaces, space);
+    let occupied: HashSet<IVec2> = HashSet::from_iter(occupied_vec.iter().cloned());
+    let valley = Valley::new(occupied);
     Ok((input, valley))
 }
 
@@ -58,66 +61,51 @@ fn get_empty_valley(length: usize, width: usize) -> Vec<Vec<bool>> {
 
 #[derive(Debug)]
 struct Valley {
-    occupied_spaces: Vec<IVec2>,
-    spaces: Vec<Vec<bool>>,
+    occupied: HashSet<IVec2>,
     directions: Vec<Direction>,
 }
 
 impl Valley {
-    fn new(occupied_spaces: Vec<IVec2>, spaces: Vec<Vec<bool>>) -> Valley {
+    fn new(occupied: HashSet<IVec2>) -> Valley {
         let directions = vec![Direction::North, Direction::South, Direction::West, Direction::East];
-        Valley { occupied_spaces, spaces, directions }
-    }
-
-    fn dimensions(&self) -> Option<IVec2> {
-        Some(IVec2::new(self.spaces[0].len() as i32, self.spaces.len() as i32))
+        Valley { occupied, directions }
     }
 
     fn n_elves(&self) -> Option<usize> {
-        Some(self.occupied_spaces.len())
+        Some(self.occupied.len())
     }
 
-    fn isolated(&self, elf: usize) -> bool {
-        let pos = self.occupied_spaces[elf];
-        let x: usize = pos.x as usize;
-        let y: usize = pos.y as usize;
-        let xlim: usize = self.spaces[0].len() - 1;
-        let ylim: usize = self.spaces.len() - 1;
+    fn isolated(&self, elf: IVec2) -> bool {
+        let xvec: Vec<i32> = vec![elf.x - 1, elf.x, elf.x + 1];
+        let yvec: Vec<i32> = vec![elf.y - 1, elf.y, elf.y + 1];
+        let product: Vec<IVec2> = iproduct!(xvec, yvec)
+            .map(|(a, b)| IVec2::new(a, b))
+            .filter(|&z| z != elf)
+            .collect::<Vec<IVec2>>();
 
-        !((x > 0 && self.spaces[y][x - 1])
-            || (x != xlim && self.spaces[y][x + 1])
-            || (y > 0 && self.spaces[y - 1][x])
-            || (y != ylim && self.spaces[y + 1][x])
-            || (x > 0 && y > 0 && self.spaces[y - 1][x - 1])
-            || (x > 0 && y != ylim && self.spaces[y + 1][x - 1])
-            || (x != xlim && y > 0 && self.spaces[y - 1][x + 1])
-            || (x != xlim && y != ylim && self.spaces[y + 1][x + 1]))
+        for e in product.iter() {
+            if self.occupied.contains(e) {
+                return false;
+            }
+        }
+        true
     }
 
-    fn next_move(&self, elf: usize) -> Option<IVec2> {
-        let pos = self.occupied_spaces[elf];
-        let x: usize = pos.x as usize;
-        let y: usize = pos.y as usize;
-
-        let blocked_north = self.blocked_above(elf);
-        let blocked_south = self.blocked_below(elf);
-        let blocked_left = self.blocked_left(elf);
-        let blocked_right = self.blocked_right(elf);
-
+    fn next_move(&self, elf: IVec2) -> Option<IVec2> {
         let mut p: Option<IVec2> = None;
         if !self.isolated(elf) {
             for dxn in self.directions.iter() {
-                if *dxn == Direction::North && !(blocked_north) {
-                    p = Some(IVec2::new(x as i32, (y - 1) as i32));
+                if *dxn == Direction::North && !(self.blocked_above(elf)) {
+                    p = Some(IVec2::new(elf.x, elf.y - 1));
                     break;
-                } else if *dxn == Direction::South && !(blocked_south) {
-                    p = Some(IVec2::new(x as i32, (y + 1) as i32));
+                } else if *dxn == Direction::South && !(self.blocked_below(elf)) {
+                    p = Some(IVec2::new(elf.x, elf.y + 1));
                     break;
                 } else if *dxn == Direction::West && !(self.blocked_left(elf)) {
-                    p = Some(IVec2::new((x - 1) as i32, y as i32));
+                    p = Some(IVec2::new(elf.x - 1, elf.y));
                     break;
                 } else if *dxn == Direction::East && !(self.blocked_right(elf)) {
-                    p = Some(IVec2::new((x + 1) as i32, y as i32));
+                    p = Some(IVec2::new(elf.x + 1, elf.y));
                     break;
                 }
             }
@@ -132,64 +120,57 @@ impl Valley {
         self.directions.push(first_direction);
     }
 
-    fn blocked_above(&self, elf: usize) -> bool {
-        let x: usize = self.occupied_spaces[elf].x as usize;
-        let y: usize = self.occupied_spaces[elf].y as usize;
-        let xlim: usize = self.spaces[0].len();
-
-        return (y == 0)
-            || (x != 0 && self.spaces[y - 1][x - 1])
-            || (x != (xlim - 1) && self.spaces[y - 1][x + 1])
-            || self.spaces[y - 1][x];
+    fn blocked_above(&self, elf: IVec2) -> bool {
+        for x in (elf.x - 1)..(elf.x + 2) {
+            let p: IVec2 = IVec2::new(x, elf.y - 1);
+            if self.occupied.contains(&p) {
+                return true;
+            }
+        }
+        false
     }
 
-    fn blocked_below(&self, elf: usize) -> bool {
-        let x: usize = self.occupied_spaces[elf].x as usize;
-        let y: usize = self.occupied_spaces[elf].y as usize;
-        let xlim: usize = self.spaces[0].len();
-        let ylim: usize = self.spaces.len();
-
-        (y == (ylim - 1))
-            || (x != 0 && self.spaces[y + 1][x - 1])
-            || (x != (xlim - 1) && self.spaces[y + 1][x + 1])
-            || self.spaces[y + 1][x]
+    fn blocked_below(&self, elf: IVec2) -> bool {
+        for x in (elf.x - 1)..(elf.x + 2) {
+            let p: IVec2 = IVec2::new(x, elf.y + 1);
+            if self.occupied.contains(&p) {
+                return true;
+            }
+        }
+        false
     }
 
-    fn blocked_left(&self, elf: usize) -> bool {
-        let x: usize = self.occupied_spaces[elf].x as usize;
-        let y: usize = self.occupied_spaces[elf].y as usize;
-        let xlim: usize = self.spaces[0].len();
-        let ylim: usize = self.spaces.len();
-
-        (x == 0)
-            || (y != 0 && self.spaces[y - 1][x - 1])
-            || (y != (ylim - 1) && self.spaces[y + 1][x - 1])
-            || self.spaces[y][x - 1]
+    fn blocked_left(&self, elf: IVec2) -> bool {
+        for y in (elf.y - 1)..(elf.y + 2) {
+            let p: IVec2 = IVec2::new(elf.x - 1, y);
+            if self.occupied.contains(&p) {
+                return true;
+            }
+        }
+        false
     }
 
-    fn blocked_right(&self, elf: usize) -> bool {
-        let x: usize = self.occupied_spaces[elf].x as usize;
-        let y: usize = self.occupied_spaces[elf].y as usize;
-        let xlim: usize = self.spaces[0].len();
-        let ylim: usize = self.spaces.len();
-
-        (x == (xlim - 1))
-            || (y != 0 && self.spaces[y - 1][x + 1])
-            || (y != (ylim - 1) && self.spaces[y + 1][x + 1])
-            || self.spaces[y][x + 1]
+    fn blocked_right(&self, elf: IVec2) -> bool {
+        for y in (elf.y - 1)..(elf.y + 2) {
+            let p: IVec2 = IVec2::new(elf.x + 1, y);
+            if self.occupied.contains(&p) {
+                return true;
+            }
+        }
+        false
     }
 
-    fn plan_moves(&mut self) -> HashMap<IVec2, Vec<usize>> {
-        let mut dict: HashMap<IVec2, Vec<usize>> = HashMap::new();
+    fn plan_moves(&mut self) -> HashMap<IVec2, Vec<IVec2>> {
+        let mut dict: HashMap<IVec2, Vec<IVec2>> = HashMap::new();
         println!("{:?}", self.directions);
-        for (id, _) in self.occupied_spaces.iter().enumerate() {
-            match self.next_move(id) {
+        for elf in self.occupied.iter() {
+            match self.next_move(*elf) {
                 Some(p) => match dict.entry(p) {
                     Entry::Vacant(e) => {
-                        e.insert(vec![id]);
+                        e.insert(vec![*elf]);
                     }
                     Entry::Occupied(e) => {
-                        e.into_mut().push(id);
+                        e.into_mut().push(*elf);
                     }
                 },
                 None => {
@@ -202,10 +183,10 @@ impl Valley {
     }
 
     fn rectangle(&self) -> (IVec2, IVec2) {
-        let minx = self.occupied_spaces.iter().map(|x| x.x).min();
-        let maxx = self.occupied_spaces.iter().map(|x| x.x).max();
-        let miny = self.occupied_spaces.iter().map(|y| y.y).min();
-        let maxy = self.occupied_spaces.iter().map(|y| y.y).max();
+        let minx = self.occupied.iter().map(|x| x.x).min();
+        let maxx = self.occupied.iter().map(|x| x.x).max();
+        let miny = self.occupied.iter().map(|y| y.y).min();
+        let maxy = self.occupied.iter().map(|y| y.y).max();
         (IVec2::new(minx.unwrap(), miny.unwrap()), IVec2::new(maxx.unwrap(), maxy.unwrap()))
     }
 
@@ -213,35 +194,21 @@ impl Valley {
         let (upper_left, lower_right) = self.rectangle();
         let dim =
             ((lower_right.x - upper_left.x + 1) * (lower_right.y - upper_left.y + 1)) as usize;
-        dim - self.occupied_spaces.len()
+        dim - self.occupied.len()
     }
 
-    fn execute_moves(&mut self, planned_moves: HashMap<IVec2, Vec<usize>>) {
+    fn execute_moves(&mut self, planned_moves: HashMap<IVec2, Vec<IVec2>>) -> usize {
+        let mut nmoves: usize = 0;
+
         for (key, value) in planned_moves {
             if value.len() == 1 {
-                let elf: usize = value[0];
-                let oldx: usize = self.occupied_spaces[elf].x as usize;
-                let oldy: usize = self.occupied_spaces[elf].y as usize;
-                self.spaces[oldy][oldx] = false;
-                let newx: usize = key.x as usize;
-                let newy: usize = key.y as usize;
-                self.occupied_spaces[elf] = key;
-                self.spaces[newy][newx] = true;
+                let oldelf: IVec2 = value[0];
+                self.occupied.remove(&oldelf);
+                self.occupied.insert(key);
+                nmoves += 1;
             }
         }
-    }
-}
-
-impl fmt::Display for Valley {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for v in &self.spaces {
-            for b in v {
-                let c = if *b { "#" } else { "." };
-                write!(f, "{}", c)?;
-            }
-            write!(f, "\n")?;
-        }
-        Ok(())
+        nmoves
     }
 }
 
@@ -249,13 +216,15 @@ impl CommandImpl for Day23 {
     fn main(&self) -> Result<(), DynError> {
         let characters = fs::read_to_string(&self.input).unwrap();
         let (_, mut valley) = parse_valley(&characters).unwrap();
-        let nelves = if let Some(nelves) = valley.n_elves() { nelves } else { 0 };
-        println!("{valley} : dimensiones {:?} with {nelves} elves", valley.dimensions());
-        for i in 1..11 {
+        let mut round: usize = 1;
+        loop {
             let planned_moves = valley.plan_moves();
-            valley.execute_moves(planned_moves);
-            println!("== End of Round {i} ==");
-            println!("{valley}");
+            let nmoves: usize = valley.execute_moves(planned_moves);
+            if nmoves == 0 {
+                println!("no elf moved at move {round}");
+                break;
+            }
+            round += 1;
         }
         let dim: usize = valley.nempty();
 
