@@ -89,6 +89,7 @@ pub struct RobotFactory {
     /// the resources gathered
     gathered_resources: UVec4,
     minute: u8,
+    first_minute: u8,
 }
 
 /// Factory builds robots based collected resources
@@ -98,17 +99,41 @@ impl RobotFactory {
         let robot_counts: glam::UVec4 = glam::UVec4::new(1, 0, 0, 0);
         let gathered_resources: UVec4 = glam::UVec4::new(0, 0, 0, 0);
         let minute: u8 = 0;
+        let first_minute: u8 = 0;
 
         for labeled_resource_cost in labeled_resource_costs {
             let (_, resource_cost) = labeled_resource_cost;
             resource_costs.push(resource_cost);
         }
 
-        RobotFactory { resource_costs, robot_counts, gathered_resources, minute }
+        RobotFactory { resource_costs, robot_counts, gathered_resources, minute, first_minute }
+    }
+
+    fn n_opening_moves(&self) -> usize {
+        if self.resource_costs[0].x < self.resource_costs[1].x {
+            self.resource_costs[0].x as usize
+        } else {
+            self.resource_costs[1].x as usize
+        }
+    }
+
+    fn floor(&self) -> u32 {
+        let nminutes: u32 = N_MINUTES as u32 - self.minute() as u32;
+        self.gathered_resources.w + nminutes * self.robot_counts.w
+    }
+
+    fn ceiling(&self) -> u32 {
+        let mut first_minute: u32 = self.first_minute as u32;
+        if self.first_minute == 0 {
+            first_minute = self.minute() as u32 + 1;
+        }
+        let nminutes: u32 = N_MINUTES as u32 - first_minute + 1;
+        self.floor() + (nminutes + (nminutes + 1)) / 2
     }
 
     fn skip_turn(&self, cutoff: &u32) -> bool {
-        ((self.robot_counts.x > self.resource_costs[1].x)
+        ((self.robot_counts.x > self.resource_costs[0].x)
+            && (self.robot_counts.x > self.resource_costs[1].x)
             && (self.robot_counts.x > self.resource_costs[2].x)
             && (self.robot_counts.x > self.resource_costs[3].x))
             || (self.robot_counts.y > self.resource_costs[2].y)
@@ -237,6 +262,9 @@ impl Factory for RobotFactory {
     fn gather_resources(&mut self) {
         self.minute += 1;
         self.gathered_resources = self.gathered_resources + self.robot_counts;
+        if self.gathered_resources.w == 1 {
+            self.first_minute = self.minute();
+        }
     }
 
     fn score(&self) -> u32 {
@@ -257,10 +285,12 @@ impl CommandImpl for Day19 {
         for mut factory in robot_factories {
             let mut factory_vec: VecDeque<RobotFactory> = VecDeque::new();
             let mut top_score: u32 = 0;
+            let mut highest_floor: u32 = 0;
             let mut cutoff: u32 = 0;
             let mut last_top_score: u32 = 0;
-            factory.gather_resources();
-            factory.gather_resources();
+            for _ in 0..factory.n_opening_moves() {
+                factory.gather_resources();
+            }
             factory_vec.push_back(factory);
             while !factory_vec.is_empty() {
                 let factory = factory_vec.pop_front().unwrap();
@@ -276,7 +306,12 @@ impl CommandImpl for Day19 {
                             top_score = f.score();
                             println!("score updated to {top_score} at minute {:?}", f.minute());
                         }
-                        if f.minute() < N_MINUTES && f.score() >= last_top_score {
+                        if f.minute() < N_MINUTES && f.ceiling() >= highest_floor {
+                            if f.floor() > highest_floor {
+                                highest_floor = f.floor();
+                                let lowest_floor: u32 = f.ceiling();
+                                println!("minute({:?}): floor = {highest_floor:?}, ceiling = {lowest_floor:?}", f.minute());
+                            }
                             factory_vec.push_back(f);
                         }
                     }
@@ -294,6 +329,8 @@ impl CommandImpl for Day19 {
         println!("length: {:?}", scores.len());
         println!("length: {:?}", scores);
         println!("scores: {:?}", final_score);
+        let elements: u32 = scores.into_iter().sum();
+        println!("elements: {:?}", elements);
 
         Ok(())
     }
