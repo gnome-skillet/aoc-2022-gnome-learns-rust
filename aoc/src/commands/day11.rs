@@ -60,9 +60,9 @@ struct Monkey {
 }
 
 fn boredom_correction(item: u64, correction_factor: u64) -> u64 {
-    let item: f32 = item as f32;
-    let correction_factor: f32 = correction_factor as f32;
-    let newvalue: f32 = item / correction_factor;
+    let item: f64 = item as f64;
+    let correction_factor: f64 = correction_factor as f64;
+    let newvalue: f64 = item / correction_factor;
     newvalue.floor() as u64
 }
 
@@ -70,6 +70,10 @@ impl Monkey {
     pub fn new(items: VecDeque<u64>, operation: Operation, test: Test) -> Self {
         let mut n_inspected: u64 = 0;
         Self { items, operation, test, n_inspected }
+    }
+
+    fn divisor(&self) -> u64 {
+        self.test.modulo
     }
 
     fn count_items(&self) -> usize {
@@ -84,7 +88,7 @@ impl Monkey {
         self.items.push_back(item);
     }
 
-    fn inspect_item(&mut self, relief_lowers_worry_level: bool, magic_trick: u64) -> u64 {
+    fn inspect_item(&mut self, relief_lowers_worry_level: bool, stress_reduction: u64) -> u64 {
         self.n_inspected += 1;
         let item = self.items.pop_front().unwrap();
         //println!("\tMonkey inspects an item with a worry level of {item}");
@@ -100,8 +104,10 @@ impl Monkey {
                 };
                 let result = num_a * num_b;
                 //println!("\t\tWorry level is multiplied by {num_b} to {result}");
-                let newresult: u64 = boredom_correction(result, magic_trick);
-                //println!("\t\tMonkey gets bored with item. Worry level is divided by {magic_trick} to {newresult}.");
+                //let newresult: u64 = boredom_correction(result, stress_reduction);
+                //let newresult: u64 = result.div_euclid(stress_reduction);
+                let newresult: u64 = result.rem_euclid(stress_reduction);
+                //println!("\t\tMonkey gets bored with item. Worry level is divided by {stress_reduction} to {newresult}.");
                 newresult
             }
             Operation::Add((a, b)) => {
@@ -115,8 +121,11 @@ impl Monkey {
                 };
                 let result = num_a + num_b;
                 //println!("\t\tWorry level increases by {num_b} to {result}");
-                let newresult: u64 = boredom_correction(result, magic_trick);
-                //println!("\t\tMonkey gets bored with item. Worry level is divided by {magic_trick} to {newresult}.");
+                //let newresult: u64 = result.div_euclid(stress_reduction);
+                let newresult: u64 = result.rem_euclid(stress_reduction);
+                //let newresult: u64 = boredom_correction(result, stress_reduction);
+                //println!("\t\t{result} % {stress_reduction} = {newresult}");
+                //println!("\t\tMonkey gets bored with item. Worry level is divided by {stress_reduction} to {newresult}.");
                 newresult
             }
         }
@@ -149,8 +158,19 @@ impl MonkeyCircle {
         Self { monkeys, n_inspections, n_rounds }
     }
 
+    pub fn modulo(&self) -> Option<u64> {
+        self.monkeys
+            .iter()
+            .map(|x| x.divisor())
+            .reduce(|a,b| a * b)
+    }
+
     pub fn print_tally(&self) {
         //println!("Round {:?}", self.n_rounds);
+        for i in 0..self.monkeys.len() {
+            let monkey = self.monkeys.get(i).unwrap();
+            println!("Monkey {i}: {:?}", monkey.items);
+        }
         for i in 0..self.monkeys.len() {
             let monkey = self.monkeys.get(i).unwrap();
             println!(
@@ -161,29 +181,31 @@ impl MonkeyCircle {
         }
     }
 
-    pub fn inspect_items(&mut self, monkey_index: usize) {
-        for _ in 0..self.monkeys[monkey_index].items.len() {
+    pub fn inspect_items(&mut self, monkey_index: usize, stress_reduction: u64) {
+        for i in 0..self.monkeys[monkey_index].items.len() {
             self.n_inspections += 1;
             let from_monkey = self.monkeys.get_mut(monkey_index).unwrap();
-            let item = from_monkey.inspect_item(true, 3);
+            let item = from_monkey.inspect_item(true, stress_reduction);
             let catcher_index = from_monkey.throw_to(item);
-            //println!("\t\tItem worry level {item} is thrown to monkey {catcher_index}");
+            //println!("\t\tItem with worry level {item} is thrown to monkey {catcher_index}");
             let to_monkey = self.monkeys.get_mut(catcher_index).unwrap();
             to_monkey.add_item(item);
         }
     }
 
-    pub fn inspection_round(&mut self) {
+    pub fn inspection_round(&mut self, stress_reduction: u64) {
         self.n_rounds += 1;
         for i in 0..self.monkeys.len() {
-            //println!("Monkey {i}");
-            self.inspect_items(i);
+            //println!("Monkey ({i}):");
+            self.inspect_items(i, stress_reduction);
         }
     }
 
-    pub fn run_n_rounds(&mut self, n: u64) {
+    pub fn run_n_rounds(&mut self, n: u64, stress_reduction: u64) {
         for i in 0..n {
-            self.inspection_round();
+            //println!("Round ({i}):");
+            self.inspection_round(stress_reduction);
+            //self.print_tally();
         }
     }
 
@@ -306,13 +328,17 @@ impl CommandImpl for Day11 {
         let file = read_to_string(&self.input).unwrap();
         //let file = read(&self.input).expect("Error in reading the file");
         let mut monkey_circle: MonkeyCircle = MonkeyCircle::new(&file);
+        let Some(monkey_modulo) = monkey_circle.modulo() else {
+            panic!();
+        };
+        println!("monkey_modulo {:?}", monkey_modulo);
         //println!("monkey circle {:?}", monkey_circle);
-        monkey_circle.run_n_rounds(20);
+        monkey_circle.run_n_rounds(10000, monkey_modulo);
         let final_score: u64 = monkey_circle.get_monkey_business_score();
         println!("Final Score: {final_score}");
         monkey_circle.print_tally();
         // 35343
-        // 121103
+        // 121103 too high
         // 121800
         println!("EX: {:?}", self.input);
         Ok(())
